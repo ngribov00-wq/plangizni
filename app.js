@@ -481,41 +481,39 @@ async function sendToAI(userText) {
     const offset = today.getTimezoneOffset() * 60000;
     
     const dToday = new Date(today - offset);
-    const dYesterday = new Date(dToday.getTime() - 86400000);
-    const dTomorrow = new Date(dToday.getTime() + 86400000);
-    
     const strToday = dToday.toISOString().split('T')[0];
-    const strYesterday = dYesterday.toISOString().split('T')[0];
-    const strTomorrow = dTomorrow.toISOString().split('T')[0];
     
     const daysOfWeek = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
     const currentDayName = daysOfWeek[today.getDay()];
 
-    // === СОБИРАЕМ КОНТЕКСТ ЗАДАЧ ДЛЯ ИИ ===
-    const targetDates = [strYesterday, strToday, strTomorrow];
+    // === ПАМЯТЬ ИИ (СЕГОДНЯ + 21 ДЕНЬ ВПЕРЕД) ===
+    const targetDates = [];
+    for(let i = 0; i <= 21; i++) {
+        let d = new Date(dToday);
+        d.setDate(d.getDate() + i);
+        targetDates.push(d.toISOString().split('T')[0]);
+    }
     const contextTasks = plannerTasks
         .filter(t => targetDates.includes(t.date) && !t.isDone)
-        .map(t => `ID: "${t.id}" | Дата: ${t.date} | Время: ${t.startHour}:${t.startMinute.toString().padStart(2, '0')} | Длит-ность: ${t.durationMinutes} мин | Название: "${t.title}"`)
+        .map(t => `ID: "${t.id}" | Дата: ${t.date} | Время: ${t.startHour}:${t.startMinute?.toString().padStart(2, '0')} | Длит: ${t.durationMinutes} мин | Название: "${t.title}"`)
         .join('\n    ');
 
     let dynamicCategoriesText = customCategories.map(c => `- "${c.id}" (${c.name}): ${c.keywords}`).join('\n    ');
 
     const prompt = `
-    Ты — ИИ-планировщик. Твоя задача — ТОЛЬКО извлекать параметры из текста. НЕ ДЕЛАЙ математику.
-    Сегодня: ${strToday}.
+    Ты — ИИ-ассистент. Твоя задача ТОЛЬКО извлекать параметры.
+    Сегодня: ${strToday} (День недели: ${currentDayName}).
 
-    Текущие задачи для контекста:
+    Твоя память на ближайшие 3 недели (текущие задачи):
     ${contextTasks || "Нет активных задач."}
 
     ПРАВИЛА:
-    1.  **Действия (action):** "create", "update", "delete".
-    2.  **Время vs Длительность:** "на 2 часа" -> durationMinutes: 120. "до 2 ночи" -> endHour: 2.
-    3.  **ПОВТОРЯЮЩИЕСЯ ЗАДАЧИ:** Если задача повторяется, извлеки ПРАВИЛО ПОВТОРЕНИЯ:
-        -   "repeat_frequency": "daily" (каждый день), "weekly" (каждую неделю).
-        -   "repeat_count": Сколько раз повторить (например, "3 недели подряд" -> 3).
-        -   Пример: "каждый понедельник 3 недели подряд" -> верни ОДНУ задачу с датой первого понедельника, "repeat_frequency": "weekly" и "repeat_count": 3.
-    4.  **Изменение (UPDATE):** Если параметр НЕ меняется, верни для него null.
-    5.  **Формат:** ВСЕГДА возвращай массив объектов JSON.
+    1.  **ДНИ НЕДЕЛИ:** Если просят "во вторник", верни "targetDayOfWeek": 2 (0-Вс, 1-Пн, 2-Вт, 3-Ср, 4-Чт, 5-Пт, 6-Сб). Дату "date" при этом НЕ меняй. Если день не назван, верни null.
+    2.  **Повторения:** "каждый вторник 2 недели" -> targetDayOfWeek: 2, repeat_frequency: "weekly", repeat_count: 2.
+    3.  **Время:** "с 12 до 13" -> startHour: 12, endHour: 13.
+    4.  **МАССОВОЕ ОБНОВЛЕНИЕ (КРИТИЧЕСКИ ВАЖНО):** Если просят перенести регулярную задачу (например, "перенеси врача на 15:00"), найди в своей памяти ВСЕ задачи с этим названием. Верни отдельный объект "update" для КАЖДОГО их ID! (То есть, если в памяти 3 врача, верни массив из 3-х объектов).
+    5.  **UPDATE:** Что не меняется — ставь null.
+    6.  **Формат:** ТОЛЬКО массив JSON.
 
     Шаблон JSON ответа:
     [
@@ -524,8 +522,11 @@ async function sendToAI(userText) {
         "id": null,
         "title": "Новая задача",
         "date": "${strToday}",
+        "targetDayOfWeek": null,
         "startHour": 10,
         "startMinute": 0,
+        "endHour": null,
+        "endMinute": null,
         "durationMinutes": 60,
         "category": "personal",
         "priority": "low",
@@ -564,39 +565,53 @@ async function sendToAI(userText) {
         let rawJson = data.choices[0].message.content;
         const jsonMatch = rawJson.match(/\[[\s\S]*\]/);
         if (!jsonMatch) {
-            alert('ИИ вернул некорректный ответ. Попробуйте переформулировать.');
+            alert('ИИ не понял запрос.');
             taskInput.value = originalText;
             return;
         }
         
         const tasksArray = JSON.parse(jsonMatch[0]);
 
-        // === ГЕНЕРАТОР ПОВТОРЯЮЩИХСЯ ЗАДАЧ ===
+        // === ЖЕЛЕЗОБЕТОННАЯ МАТЕМАТИКА ДНЕЙ НЕДЕЛИ ===
+        tasksArray.forEach(task => {
+            if (task.targetDayOfWeek !== null && task.targetDayOfWeek !== undefined) {
+                let baseDate = new Date(strToday + 'T00:00:00'); 
+                let currentDay = baseDate.getDay(); 
+                let target = task.targetDayOfWeek;
+                
+                // Вычисляем, сколько дней нужно прибавить до нужного дня недели
+                let diff = target - currentDay;
+                if (diff < 0) diff += 7; // Если сегодня Ср(3), а просят Вт(2), прибавляем неделю
+                
+                baseDate.setDate(baseDate.getDate() + diff);
+                const localOffset = baseDate.getTimezoneOffset() * 60000;
+                task.date = new Date(baseDate - localOffset).toISOString().split('T')[0];
+            }
+        });
+
+        // === ГЕНЕРАТОР ПОВТОРЕНИЙ ===
         const finalTasksToProcess = [];
         tasksArray.forEach(taskRule => {
             if (taskRule.action === 'create' && taskRule.repeat_frequency && taskRule.repeat_count > 1) {
                 const startDate = new Date(taskRule.date + 'T00:00:00');
                 for (let i = 0; i < taskRule.repeat_count; i++) {
                     const newTask = { ...taskRule };
-                    
                     const nextDate = new Date(startDate);
                     if (taskRule.repeat_frequency === 'weekly') {
                         nextDate.setDate(startDate.getDate() + (i * 7));
                     } else if (taskRule.repeat_frequency === 'daily') {
                         nextDate.setDate(startDate.getDate() + i);
                     }
-                    
-                    const offset = nextDate.getTimezoneOffset() * 60000;
-                    newTask.date = new Date(nextDate - offset).toISOString().split('T')[0];
+                    const localOffset = nextDate.getTimezoneOffset() * 60000;
+                    newTask.date = new Date(nextDate - localOffset).toISOString().split('T')[0];
                     finalTasksToProcess.push(newTask);
                 }
             } else {
                 finalTasksToProcess.push(taskRule);
             }
         });
-        // ===============================================
 
-        // Теперь обрабатываем наш новый финальный список
+        // === ОБРАБОТКА (UPDATE, DELETE, CREATE) ===
         finalTasksToProcess.forEach(taskParams => {
             if (taskParams.action !== 'delete' && taskParams.endHour !== null && taskParams.endHour !== undefined) {
                 const taskToUpdate = plannerTasks.find(t => t.id === taskParams.id);
@@ -604,7 +619,7 @@ async function sendToAI(userText) {
                 const startMinute = taskParams.startMinute !== null ? taskParams.startMinute : (taskToUpdate?.startMinute || 0);
                 const startTotal = startHour * 60 + startMinute;
                 let endTotal = taskParams.endHour * 60 + (taskParams.endMinute || 0);
-                if (endTotal < startTotal) endTotal += 24 * 60;
+                if (endTotal < startTotal) endTotal += 24 * 60; // Переход через полночь
                 taskParams.durationMinutes = endTotal - startTotal;
             }
 
@@ -625,12 +640,11 @@ async function sendToAI(userText) {
                 taskParams.id = 't_' + Date.now() + Math.random();
                 taskParams.isDone = false;
                 taskParams.durationMinutes = taskParams.durationMinutes || 60;
+                taskParams.category = taskParams.category || 'personal'; // Защита от прозрачности
                 plannerTasks.push(taskParams);
             }
         });
         
-        // ... твой код с finalTasksToProcess.forEach ...
-
         localStorage.setItem('plannerTasks', JSON.stringify(plannerTasks));
         renderAllTasks();
         
@@ -638,7 +652,7 @@ async function sendToAI(userText) {
         taskInput.placeholder = `Создано задач: ${finalTasksToProcess.length}`;
         setTimeout(() => taskInput.placeholder = 'Напиши задачу...', 2500);
 
-    } catch (error) { // <-- ВОТ ТАК ПРАВИЛЬНО!
+    } catch (error) {
         console.error('Сбой приложения:', error);
         taskInput.value = originalText;
         alert('Не удалось обработать задачу. Открой консоль (F12) для деталей.');

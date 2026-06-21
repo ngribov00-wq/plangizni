@@ -1,0 +1,525 @@
+/* Базовые настройки и цветовая палитра */
+:root {
+    --bg-color: #f4f5f7;        /* Светло-серый фон приложения */
+    --surface-color: #ffffff;   /* Белый цвет для шапки и панелей */
+    --text-main: #1a1a1a;       /* Основной текст */
+    --text-muted: #6b7280;      /* Второстепенный текст (серый) */
+    --primary-color: #2563eb;   /* Синий для кнопки отправки */
+    --border-color: #e5e7eb;    /* Цвет разделительных линий */
+}
+
+/* Сброс стандартных отступов браузера */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    /* Используем dvh (dynamic) для современных мобильных браузеров, а vh как запасной вариант для старых */
+    height: 100vh; 
+    height: 100dvh; 
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; 
+}
+
+/* --- Шапка --- */
+.app-header {
+    background-color: var(--surface-color);
+    height: 60px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 15px;
+    border-bottom: 1px solid var(--border-color);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.03); /* Легкая тень */
+    z-index: 10;
+}
+
+.app-header h1 {
+    font-size: 18px;
+    font-weight: 600;
+}
+
+/* --- Кнопки с иконками --- */
+.icon-btn {
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+    transition: 0.2s;
+}
+
+.icon-btn:active {
+    background-color: var(--border-color); /* Эффект нажатия */
+}
+
+/* --- Основная зона (где будет сетка) --- */
+.app-main {
+    flex-grow: 1; /* Растягиваем на всё свободное пространство */
+    overflow-y: auto; /* Включаем прокрутку */
+    padding: 10px;
+    position: relative;
+}
+
+.placeholder-text {
+    text-align: center;
+    color: var(--text-muted);
+    margin-top: 50px;
+    font-size: 14px;
+}
+
+/* --- Нижняя панель (Ввод) --- */
+.app-footer {
+    background-color: var(--surface-color);
+    /* Увеличиваем нижний отступ, чтобы 100% не прилипало к краю телефона */
+    padding: 10px 15px 15px 15px; 
+    padding-bottom: calc(15px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--border-color);
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.03);
+    z-index: 10;
+}
+
+.input-container {
+    display: flex;
+    align-items: center;
+    background-color: var(--bg-color);
+    border-radius: 25px;
+    padding: 5px 10px;
+    border: 1px solid var(--border-color);
+}
+
+#task-input {
+    flex-grow: 1;
+    border: none;
+    background: none;
+    padding: 10px;
+    font-size: 16px;
+    color: var(--text-main);
+    outline: none; /* Убираем стандартную рамку при клике */
+}
+
+/* Раскрашиваем иконки действий */
+.mic-btn { color: #ef4444; } /* Красный микрофон */
+.send-btn { color: var(--primary-color); }
+/* --- Сетка календаря --- */
+.calendar-grid {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background-color: var(--surface-color);
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    /* Включаем главный горизонтальный скролл для всего календаря */
+    overflow-x: auto;
+    overflow-y: hidden; 
+}
+
+.days-header {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    background-color: #f9fafb;
+    /* Жесткая ширина, чтобы дни недели не сжимались */
+    min-width: 750px; 
+}
+
+.time-spacer {
+    width: 50px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border-color);
+}
+
+.day-col {
+    flex: 1;
+    text-align: center;
+    padding: 10px 0;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+    border-right: 1px solid var(--border-color);
+}
+
+.current-day {
+    color: var(--primary-color);
+    font-weight: bold;
+    background-color: #eff6ff;
+}
+
+.time-grid-container {
+    flex-grow: 1;
+    /* Вертикальный скролл (вверх-вниз по времени) */
+    overflow-y: auto; 
+    /* Глушим лишний внутренний горизонтальный скролл */
+    overflow-x: hidden; 
+    /* Синхронизируем ширину контейнера с шапкой */
+    min-width: 750px; 
+}
+
+.time-grid {
+    position: relative;
+    width: 100%;
+    /* Гарантируем, что сетка занимает всю доступную высоту контейнера */
+    min-height: 100%; 
+    background-image: linear-gradient(to bottom, var(--border-color) 1px, transparent 1px);
+    background-size: 100% 60px;
+}
+
+.hour-label {
+    position: absolute;
+    left: 0;
+    width: 50px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    transform: translateY(-8px);
+    /* Закрашиваем фон под цифрами, чтобы линии их не перечеркивали */
+    background-color: var(--surface-color); 
+    z-index: 5;
+}
+/* --- Карточки задач --- */
+.task-card {
+    position: absolute;
+    border-radius: 6px;
+    padding: 6px 4px; /* Чуть уменьшили боковые отступы */
+    font-size: 10px; /* Сделали шрифт капельку меньше для мобилок */
+    color: #ffffff;
+    overflow: hidden;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    border-left: 4px solid rgba(255, 255, 255, 0.5); 
+    transition: transform 0.2s;
+    cursor: pointer;
+    word-wrap: break-word; /* Заставляем текст нормально переноситься */
+    line-height: 1.1; /* Делаем строчки плотнее */
+}
+.task-card:hover {
+    transform: scale(1.02); /* Чуть увеличивается при наведении */
+}
+
+.task-title {
+    font-weight: 600;
+    margin-bottom: 2px;
+    line-height: 1.2;
+}
+
+.task-time {
+    font-size: 10px;
+    opacity: 0.9;
+}
+
+/* Цвета наших категорий */
+.cat-study { background-color: #10b981; }    /* Зеленый */
+.cat-work { background-color: #3b82f6; }     /* Синий */
+.cat-personal { background-color: #8b5cf6; } /* Фиолетовый */
+/* Класс, который сделает карточку полупрозрачной */
+.task-card.done {
+    opacity: 0.4;
+    text-decoration: line-through; /* Зачеркнет текст для верности */
+}
+
+/* Стиль для нашей будущей галочки */
+.task-checkbox {
+    margin-right: 5px;
+    cursor: pointer;
+}
+/* Дизайн переключателей День/Неделя/Месяц */
+.view-switchers {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin: 10px 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.view-switchers button {
+    padding: 8px 16px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    background: white;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s; /* Плавное переключение цвета */
+}
+
+/* Это класс, который JavaScript перевешивает при клике */
+.view-switchers button.active {
+    background: #3b82f6;
+    color: white;
+    border-color: #3b82f6;
+}
+
+/* ==========================================
+   СТИЛИ ДЛЯ РЕЖИМА МЕСЯЦА
+   ========================================== */
+.month-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr); /* 7 колонок для дней недели */
+    gap: 1px; /* Сетка-бордюр между днями */
+    background-color: #e5e7eb;
+    border: 1px solid #e5e7eb;
+    border-top: none;
+}
+
+.month-cell {
+    background-color: #fff;
+    min-height: 100px; /* Высота квадратика дня */
+    padding: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.month-cell-date {
+    font-size: 12px;
+    font-weight: bold;
+    color: #6b7280;
+    margin-bottom: 4px;
+    text-align: right;
+}
+
+/* Мини-карточка задачи для месяца */
+.month-task {
+    font-size: 10px;
+    padding: 3px 5px;
+    border-radius: 4px;
+    color: white;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis; /* Если текст длинный, ставим троеточие */
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.month-task.done {
+    opacity: 0.4;
+    text-decoration: line-through;
+}
+/* ==========================================
+   НАВИГАЦИЯ ПО ДАТАМ
+   ========================================== */
+.date-navigator {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 15px 10px 15px;
+}
+
+#current-date-label {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-main);
+    text-transform: capitalize; /* Чтобы месяцы писались с большой буквы */
+    margin: 0;
+}
+/* ==========================================
+   ВАЖНОСТЬ ЗАДАЧ
+   ========================================== */
+.priority-high {
+    color: #ef4444; /* Красный цвет */
+    font-weight: 900;
+    margin-right: 3px;
+}
+
+.priority-med {
+    color: #f59e0b; /* Оранжевый цвет */
+    font-weight: 800;
+    margin-right: 3px;
+}
+/* ==========================================
+   ВЫРАВНИВАНИЕ ШАПКИ В РЕЖИМЕ МЕСЯЦА
+   ========================================== */
+.days-header.month-mode {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 1px;
+    background-color: #e5e7eb; /* Цвет полосок-разделителей */
+    border-bottom: 1px solid #e5e7eb;
+}
+.days-header.month-mode .day-col {
+    border-right: none; /* Отключаем старые границы flex-режима */
+    background-color: #f9fafb; /* Возвращаем фон самой ячейке */
+}
+/* Шапка, встроенная прямо в сетку месяца */
+.month-header-cell {
+    background-color: #f9fafb;
+    text-align: center;
+    padding: 10px 0;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+}
+/* ==========================================
+   ТЁМНАЯ ТЕМА
+   ========================================== */
+body.dark-theme {
+    /* Меняем базовые переменные на тёмные */
+    --bg-color: #121212;
+    --surface-color: #1e1e1e;
+    --text-main: #f3f4f6;
+    --text-muted: #9ca3af;
+    --border-color: #374151;
+}
+
+/* Перекрашиваем жестко заданные фоны шапки и сетки */
+body.dark-theme .days-header,
+body.dark-theme .month-header-cell {
+    background-color: var(--surface-color);
+}
+
+body.dark-theme .current-day {
+    background-color: #1e3a8a; /* Темно-синий фон выделения сегодня */
+}
+
+body.dark-theme .month-grid {
+    background-color: var(--border-color);
+    border-color: var(--border-color);
+}
+
+body.dark-theme .month-cell {
+    background-color: var(--surface-color);
+}
+
+/* Перекрашиваем переключатели День/Неделя/Месяц */
+body.dark-theme .view-switchers button {
+    background: var(--surface-color);
+    color: var(--text-main);
+    border-color: var(--border-color);
+}
+
+body.dark-theme .view-switchers button.active {
+    background: #3b82f6; /* Возвращаем синий активной кнопке */
+    color: #ffffff;
+    border-color: #3b82f6;
+}
+/* ==========================================
+   УКРУПНЕННЫЙ ШРИФТ ДЛЯ РЕЖИМА "ДЕНЬ"
+   ========================================== */
+.task-card-large {
+    /* Сверху и снизу отступы по 5px (чтобы экономить высоту), по бокам 10px */
+    padding: 5px 10px !important; 
+}
+
+/* Категория (например, [Личное]) */
+.task-card-large .task-category-label {
+    font-size: 12px !important;
+}
+
+/* Галочка */
+.task-card-large .task-checkbox {
+    width: 15px;
+    height: 15px;
+}
+
+/* Заголовок задачи */
+.task-card-large .task-title {
+    font-size: 15px !important; 
+    margin-top: 2px;
+    margin-bottom: 2px;
+    line-height: 1.1;
+    /* Если задача очень короткая (например, 15 мин), текст аккуратно обрежется троеточием, а не вылезет за края */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Время внизу */
+.task-card-large .task-time {
+    font-size: 12px !important;
+}
+/* ==========================================
+   СУПЕР-ВЫДЕЛЕНИЕ ДЛЯ ОЧЕНЬ ВАЖНЫХ ЗАДАЧ
+   ========================================== */
+/* Анимация пульсирующего свечения */
+@keyframes pulse-glow {
+    0% { box-shadow: 0 0 5px rgba(239, 68, 68, 0.4); }
+    50% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.9); }
+    100% { box-shadow: 0 0 5px rgba(239, 68, 68, 0.4); }
+}
+
+/* Класс, который мы будем вешать на саму карточку */
+.priority-high-card {
+    border-left: 5px solid #ef4444 !important; /* Толстая красная линия слева */
+    animation: pulse-glow 2s infinite; /* Запускаем пульсацию тени */
+    z-index: 5; /* Чтобы свечение было поверх других карточек */
+}
+
+/* Для маленьких карточек в режиме месяца */
+.month-task.priority-high-card {
+    border-left: 3px solid #ef4444 !important;
+    animation: pulse-glow 2s infinite;
+}
+/* ==========================================
+   МОДАЛЬНОЕ ОКНО РЕДАКТИРОВАНИЯ
+   ========================================== */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: var(--surface-color);
+    width: 90%;
+    max-width: 400px;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+}
+
+.modal-content h3 {
+    margin-bottom: 15px;
+    font-size: 18px;
+}
+
+.modal-content label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+}
+
+.modal-content input, .modal-content select {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-color);
+    color: var(--text-main);
+    font-size: 14px;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+}
+
+.modal-actions button {
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.btn-primary { background: var(--primary-color); color: white; }
+.btn-secondary { background: var(--border-color); color: var(--text-main); }
+.btn-danger { background: #ef4444; color: white; }
+/* Отключаем меню копирования при долгом нажатии на микрофон */
+.mic-btn {
+    user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+}

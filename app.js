@@ -519,9 +519,9 @@ async function sendToAI(userText) {
     const daysOfWeek = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
     const currentDayName = daysOfWeek[today.getDay()];
 
-    // Собираем даты на 3 недели вперед
+    // === ПАМЯТЬ ИИ ===
     const targetDates = [];
-    for(let i = 0; i <= 21; i++) {
+    for(let i = 0; i <= 28; i++) { 
         let d = new Date(dToday);
         d.setDate(d.getDate() + i);
         targetDates.push(d.toISOString().split('T')[0]);
@@ -529,28 +529,38 @@ async function sendToAI(userText) {
 
     const contextTasks = plannerTasks
         .filter(t => targetDates.includes(t.date) && !t.isDone)
-        .map(t => `ID: "${t.id}" | Дата: ${t.date} | Время: ${t.startHour !== null ? t.startHour : ''}:${t.startMinute !== null ? t.startMinute.toString().padStart(2, '0') : ''} | Длит: ${t.durationMinutes || 0} мин | Название: "${t.title}"`)
+        .map(t => {
+            const tDateObj = new Date(t.date);
+            const tDayName = daysOfWeek[tDateObj.getDay()];
+            const h = t.startHour !== null ? t.startHour.toString().padStart(2, '0') : '--';
+            const m = t.startMinute !== null ? t.startMinute.toString().padStart(2, '0') : '--';
+            return `ID: "${t.id}" | Дата: ${t.date} (${tDayName}) | Время: ${h}:${m} | Длит: ${t.durationMinutes || 0} мин | Название: "${t.title}"`;
+        })
         .join('\n    ');
 
     let dynamicCategoriesText = customCategories.map(c => `- "${c.id}" (${c.name}): ${c.keywords}`).join('\n    ');
 
     const prompt = `
-    Ты — ИИ-ассистент. Твоя задача ТОЛЬКО извлекать параметры.
-    Сегодня: ${strToday} (День недели: ${currentDayName}).
+    Ты — высокоточный ИИ-ассистент, который превращает человеческую речь в JSON-команды для планировщика. Твоя единственная задача — ИЗВЛЕКАТЬ ПАРАМЕТРЫ, не додумывая и не считая ничего самостоятельно.
 
-    Твоя память (текущие задачи):
+    ШПАРГАЛКА ДАТ (Используй строго эти значения, не пытайся считать даты сам!):
+    - "сегодня": ${strToday} (День недели: ${currentDayName})
+    - "завтра": ${strTomorrow}
+    - "послезавтра": ${strDayAfter}
+
+    Твоя память (задачи пользователя на ближайшие 4 недели):
     ${contextTasks || "Нет активных задач."}
 
     КАТЕГОРИИ (category) - ВЫБИРАЙ ИЗ ЭТИХ СТРОГО:
-    - "study" (Учеба)
-    - "work" (Работа)
-    - "personal" (Личное)
-    - "sport" (Спорт): качалка зал, волейбол, баскет, валик, бассейн, тренажеры, поло, ФОК, тренер, сушка, фитнес, тренировка, треня, качаться, разминка, зарядка, растяжка.
+    - "study" (Учеба): пара, лекция, экзамен, домашняя, диплом, курсовая, универ, семинар, реферат, домашка, статья, научный журнал.
+    - "work" (Работа): совещание, дедлайн, созвон, клиент, босс, смена, отчет, проект, собеседование, микрозелень, школа, созвон с Пашей, созвон с Игорем, зарплата, деньги, партнер, коллега.
+    - "personal" (Личное): всё остальное (семья, отдых, покупки, друзья, дом, уборка, готовка).
+    - "sport" (Спорт): качалка зал, волейбол, баскет, валик, бассейн, тренажеры, поло, ФОК, тренер, сушка, фитнес, тренировка, треня, качаться, разминка, зарядка, растяжка, пляжный волейбол, пляжка.
     - "selfdev" (Саморазвитие): Книга, аудиокнига, курс, вебинар, урок, подкаст, английский, немецкий, медитация, рефлексия, психолог, терапия, коуч, цели, трекер, навык, скилл, вокал, гитара, рисование.
     - "health" (Здоровье): Врач, доктор, стоматолог, терапевт, анализы, узи, мрт, поликлиника, больница, аптека, таблетки, витамины, рецепт, массаж, сон, чекап, зрение, спина, зубы, диета.
     ${dynamicCategoriesText}
 
-    СЛОВАРЬ ВРЕМЕНИ (Для поиска окон):
+    СЛОВАРЬ ВРЕМЕННЫХ ОКОН (Используй для поиска свободных окон):
     - "утром": startHour: 6, maxEndHour: 12
     - "до обеда": startHour: 8, maxEndHour: 12
     - "после обеда": startHour: 12, maxEndHour: 18
@@ -560,31 +570,64 @@ async function sendToAI(userText) {
     - "вечером": startHour: 18, maxEndHour: 24
     - "ночью": startHour: 0, maxEndHour: 6
 
-    ПРАВИЛА:
-    1. ДНИ НЕДЕЛИ: Если просят "во вторник", верни "targetDayOfWeek": 2. Дату "date" при этом НЕ меняй. 
-    2. Повторения: "каждый вторник 2 недели" -> targetDayOfWeek: 2, repeat_frequency: "weekly", repeat_count: 2.
-    3. МАССОВОЕ ОБНОВЛЕНИЕ: Перенос регулярной задачи -> верни "update" для КАЖДОГО её ID.
-    4. УМНЫЙ ПОИСК ВРЕМЕНИ (AUTO-SCHEDULING): Если просят "найти время", "окно" или говорят слова из СЛОВАРЯ выше ("после обеда" и т.д.) -> action: "auto_schedule". Укажи "durationMinutes". Укажи "startHour" и "maxEndHour" строго из СЛОВАРЯ.
-    5. ТОЧНОЕ ВРЕМЯ: "в 15:00" -> action: "create", startHour: 15, maxEndHour: null.
-    6. UPDATE: Что не меняется — ставь null.
-    7. Формат: ТОЛЬКО массив JSON.
+    СТРОГИЕ ПРАВИЛА ИЗВЛЕЧЕНИЯ:
+
+    1.  **ОПРЕДЕЛИ ДЕЙСТВИЕ (action):**
+        -   "auto_schedule" (УМНЫЙ ПОИСК): Если время названо РАЗМЫТО (использовано ЛЮБОЕ слово из блока "СЛОВАРЬ ВРЕМЕННЫХ ОКОН" выше). Строго возьми "startHour" и "maxEndHour" ИЗ СЛОВАРЯ, и скрипт сам найдет свободное "окно".
+        -   "create" (ЖЕСТКАЯ ПРИВЯЗКА): ТОЛЬКО если время названо ТОЧНО в цифрах ("в 18:00", "в 6 вечера", "с 15 до 16"). Задача встанет ровно на это время (наложение разрешено).
+        -   "update": просят изменить/перенести существующую.
+        -   "delete": просят отменить/удалить существующую.
+
+    2.  **ОПРЕДЕЛИ ДАТУ (ВНИМАНИЕ: НЕ СЧИТАЙ ДНИ САМ!):**
+        -   Если в запросе есть "сегодня", "завтра", "послезавтра", возьми готовую дату из ШПАРГАЛКИ и запиши в поле "date".
+        -   Если дата уже указана точно (например, "25 июня"), переведи её в формат YYYY-MM-DD и запиши в "date".
+        -   Если говорят день недели ("в среду", "на следующей неделе в пятницу"), поле "date" оставь null, а заполни:
+            -> "targetDayOfWeek": от 0 (Вс) до 6 (Сб).
+            -> "weekOffset": Смещение в неделях. Если "на этой неделе" или просто "в среду" -> 0. Если ЯВНО говорят "через неделю" или "на следующей неделе" -> 1. "через 2 недели" -> 2.
+        -   СПИСКИ: Если просят на несколько дней ("в понедельник и среду"), верни массив из СТОЛЬКИХ объектов JSON, сколько дней названо.
+
+    3.  **ОПРЕДЕЛИ ВРЕМЯ (ВЫБЕРИ СТРОГО ОДИН ВАРИАНТ):**
+        -   **Точка окончания ("до ХХ:ХХ"):** извлеки startHour и endHour. durationMinutes = null.
+        -   **Длительность ("на ХХ часов"):** извлеки durationMinutes. endHour = null.
+        -   **Умный поиск ("днем", "вечером"):** startHour и maxEndHour бери из словаря. Поле endHour ОБЯЗАТЕЛЬНО = null!
+        -   **Весь день ("весь день"):** startHour: 6, endHour: 24, durationMinutes: null.
+        -   **Без времени (часы не названы):** ВСЕ поля времени (startHour, endHour, durationMinutes) = null.
+        -   Пример 1: "с 23:00 до 2 ночи" -> startHour: 23, endHour: 2, durationMinutes: null.
+        -   Пример 2: "в 15:00 на 2 часа" -> startHour: 15, durationMinutes: 120, endHour: null.
+        -   Пример 3: "завтра днем врач" -> action: "auto_schedule", startHour: 12, maxEndHour: 18, endHour: null.
+
+    4.  **ОПРЕДЕЛИ ПОВТОРЕНИЯ И СПИСКИ:**
+        -   Если просят на несколько дней сразу ("в понедельник и в среду") -> верни массив из СТОЛЬКИХ объектов JSON, сколько дней названо.
+        -   "каждый день 5 раз" -> repeat_frequency: "daily", repeat_count: 5.
+        -   "каждый вторник 3 недели" -> repeat_frequency: "weekly", repeat_count: 3. Дату не трогай, просто верни "targetDayOfWeek": 2.
+        -   "каждый будний день 2 недели" (или "по будням") -> repeat_frequency: "workdays", repeat_count: 10.
+
+5.  **ОБНОВЛЕНИЕ (UPDATE) И УДАЛЕНИЕ (DELETE):**
+        -   ОДИНАРНОЕ ("перенеси обед", "отмени встречу"): найди конкретный ID и верни 1 объект.
+        -   МАССОВОЕ ("перенеси все тренировки", "удали всё на этой неделе"): ты ОБЯЗАН найти в памяти ID ВООБЩЕ ВСЕХ подходящих задач. Верни массив с действием ("update" или "delete") для КАЖДОГО найденного ID! Строго запрещено лениться и пропускать задачи из списка!
+
+    6.  **ПРИОРИТЕТ (priority):**
+        -   "срочно", "важно" -> "high". По умолчанию -> "medium".
+
+    7.  **ФОРМАТ И НАЗВАНИЕ:** Всегда возвращай ТОЛЬКО массив JSON. Поле "title" ОБЯЗАТЕЛЬНО заполняй кратким названием задачи (например: "Врач", "Отчет"). Никогда не оставляй "title" как null при создании! Для остальных ненужных полей ставь null.
 
     Шаблон JSON ответа:
     [
       {
         "action": "create", 
         "id": null,
-        "title": "Новая задача",
-        "date": "${strToday}",
+        "title": null,
+        "date": null,
         "targetDayOfWeek": null,
-        "startHour": 10,
-        "startMinute": 0,
+        "weekOffset": null,
+        "startHour": null,
+        "startMinute": null,
         "endHour": null,
         "endMinute": null,
         "maxEndHour": null,
-        "durationMinutes": 60,
-        "category": "personal",
-        "priority": "low",
+        "durationMinutes": null,
+        "category": null,
+        "priority": "medium",
         "repeat_frequency": null,
         "repeat_count": null
       }
@@ -607,34 +650,66 @@ async function sendToAI(userText) {
         
         const tasksArray = JSON.parse(jsonMatch[0]);
 
-        // === ДНИ НЕДЕЛИ ===
+        // === КРУТОЙ МАТЕМАТИЧЕСКИЙ ПАРСЕР ДАТ ===
         tasksArray.forEach(task => {
-            // ЗАПУСКАЕМ ВЫЧИСЛЕНИЕ ТОЛЬКО ЕСЛИ ИИ НЕ ПОСТАВИЛ ДАТУ "ЗАВТРА" ИЛИ "ПОСЛЕЗАВТРА"
-            if (task.targetDayOfWeek !== null && task.targetDayOfWeek !== undefined && task.date === strToday) {
-                let baseDate = new Date(strToday + 'T00:00:00');
+            if (task.targetDayOfWeek !== null && task.targetDayOfWeek !== undefined) {
+                let baseDate = new Date(dToday); 
                 let currentDay = baseDate.getDay(); 
                 let target = task.targetDayOfWeek;
+                let offsetWeeks = task.weekOffset || 0; 
+
                 let diff = target - currentDay;
+                
+                // Если день уже прошел на этой неделе, перекидываем на следующую (+7)
                 if (diff < 0) diff += 7; 
+
+                // Плюсуем смещение по неделям
+                diff += (offsetWeeks * 7);
+
                 baseDate.setDate(baseDate.getDate() + diff);
                 const localOffset = baseDate.getTimezoneOffset() * 60000;
                 task.date = new Date(baseDate - localOffset).toISOString().split('T')[0];
+            } else if (!task.date && task.action !== 'update' && task.action !== 'delete') {
+                // Страховка от пустой даты работает ТОЛЬКО при создании новых задач!
+                task.date = strToday; 
             }
         });
 
-        // === ПОВТОРЕНИЯ ===
+        // === ПОВТОРЕНИЯ (УМНЫЕ) ===
         const finalTasksToProcess = [];
         tasksArray.forEach(taskRule => {
             if (taskRule.action === 'create' && taskRule.repeat_frequency && taskRule.repeat_count > 1) {
                 const startDate = new Date(taskRule.date + 'T00:00:00');
-                for (let i = 0; i < taskRule.repeat_count; i++) {
-                    const newTask = { ...taskRule };
+                
+                let addedTasks = 0; // Сколько задач реально создали
+                let dayOffset = 0;  // На сколько дней отступили от старта
+                
+                // Крутим цикл, пока не создадим нужное количество задач
+                while (addedTasks < taskRule.repeat_count) {
                     const nextDate = new Date(startDate);
-                    if (taskRule.repeat_frequency === 'weekly') nextDate.setDate(startDate.getDate() + (i * 7));
-                    else if (taskRule.repeat_frequency === 'daily') nextDate.setDate(startDate.getDate() + i);
+                    
+                    if (taskRule.repeat_frequency === 'weekly') {
+                        nextDate.setDate(startDate.getDate() + (addedTasks * 7));
+                    } else if (taskRule.repeat_frequency === 'daily') {
+                        nextDate.setDate(startDate.getDate() + addedTasks);
+                    } else if (taskRule.repeat_frequency === 'workdays') {
+                        nextDate.setDate(startDate.getDate() + dayOffset);
+                        const dayOfWeek = nextDate.getDay();
+                        
+                        // Если наткнулись на Воскресенье (0) или Субботу (6)
+                        if (dayOfWeek === 0 || dayOfWeek === 6) {
+                            dayOffset++; // Шагаем дальше по календарю
+                            continue;    // Пропускаем создание задачи, счетчик addedTasks не растет
+                        }
+                    }
+
+                    const newTask = { ...taskRule };
                     const localOffset = nextDate.getTimezoneOffset() * 60000;
                     newTask.date = new Date(nextDate - localOffset).toISOString().split('T')[0];
                     finalTasksToProcess.push(newTask);
+                    
+                    addedTasks++;
+                    if (taskRule.repeat_frequency === 'workdays') dayOffset++;
                 }
             } else {
                 finalTasksToProcess.push(taskRule);
@@ -652,12 +727,36 @@ async function sendToAI(userText) {
                 const searchMaxEndMin = taskParams.maxEndHour !== null ? taskParams.maxEndHour * 60 : 22 * 60; 
                 
                 // Получаем все задачи на этот день
+                // Получаем все задачи на этот день
                 let dayTasks = plannerTasks.filter(t => t.date === taskParams.date && t.startHour !== null);
-                // Делаем из них массив "занятых отрезков"
                 let busy = dayTasks.map(t => ({
-                    start: t.startHour * 60 + t.startMinute,
-                    end: t.startHour * 60 + t.startMinute + (t.durationMinutes || 60)
-                })).sort((a,b) => a.start - b.start);
+                    start: t.startHour * 60 + (t.startMinute || 0),
+                    end: t.startHour * 60 + (t.startMinute || 0) + (t.durationMinutes || 60)
+                }));
+
+                // === НОВОЕ: ИЩЕМ "ХВОСТЫ" ВЧЕРАШНИХ ЗАДАЧ ===
+                // Вычисляем вчерашнюю дату относительно той, на которую ищем окно
+                const [sy, sm, sd] = taskParams.date.split('-');
+                const searchDateObj = new Date(sy, sm - 1, sd);
+                searchDateObj.setDate(searchDateObj.getDate() - 1);
+                const sOffset = searchDateObj.getTimezoneOffset() * 60000;
+                const strYesterday = new Date(searchDateObj - sOffset).toISOString().split('T')[0];
+
+                // Берем вчерашние задачи
+                let yesterdayTasks = plannerTasks.filter(t => t.date === strYesterday && t.startHour !== null);
+                yesterdayTasks.forEach(t => {
+                    const sMins = t.startHour * 60 + (t.startMinute || 0);
+                    const eMins = sMins + (t.durationMinutes || 60);
+                    if (eMins > 1440) { // Если задача закончилась после полуночи (на следующий день)
+                        busy.push({
+                            start: 0, // Хвост начинается ровно с 00:00
+                            end: eMins - 1440 // И заканчивается вот во столько
+                        });
+                    }
+                });
+
+                // Теперь сортируем весь этот винегрет из сегодняшних задач и вчерашних хвостов
+                busy.sort((a, b) => a.start - b.start);
 
                 let foundStart = null;
                 
@@ -705,12 +804,15 @@ async function sendToAI(userText) {
                 if (index !== -1) {
                     const oldTask = plannerTasks[index];
                     plannerTasks[index] = { ...oldTask, ...Object.fromEntries(Object.entries(taskParams).filter(([_, v]) => v !== null)) };
-                } else { 
-                    taskParams.id = 't_' + Date.now() + Math.random();
-                    taskParams.isDone = false;
-                    taskParams.durationMinutes = taskParams.durationMinutes || 60;
-                    plannerTasks.push(taskParams);
-                }
+                } else { // Create
+                taskParams.id = 't_' + Date.now() + Math.random();
+                taskParams.isDone = false;
+                // Страховка: если ИИ забыл название, пишем дефолтное
+                taskParams.title = taskParams.title || 'Новая задача';
+                taskParams.durationMinutes = taskParams.durationMinutes || 60;
+                taskParams.category = taskParams.category || 'personal'; 
+                plannerTasks.push(taskParams);
+            }
             } else { // Create
                 taskParams.id = 't_' + Date.now() + Math.random();
                 taskParams.isDone = false;
@@ -838,7 +940,12 @@ function openTaskModal(task, index) {
     inTitle.value = task.title;
     inCategory.value = task.category || 'personal';
     inDate.value = task.date;
-    inTime.value = task.startHour !== null && task.startHour !== undefined ? `${task.startHour.toString().padStart(2, '0')}:${task.startMinute.toString().padStart(2, '0')}` : '';
+    
+    // БРОНЯ: Если минут нет, ставим 00, чтобы скрипт не падал
+    const h = task.startHour;
+    const m = task.startMinute || 0; 
+    inTime.value = (h !== null && h !== undefined) ? `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}` : '';
+    
     inDuration.value = task.durationMinutes || '';
     inPriority.value = task.priority || 'low';
     
